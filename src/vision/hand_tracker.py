@@ -3,6 +3,7 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import os
+import numpy as np
 
 class HandTracker:
     def __init__(self, model_path='src/vision/hand_landmarker.task', max_num_hands=2, min_detection_confidence=0.7, min_tracking_confidence=0.5):
@@ -41,8 +42,9 @@ class HandTracker:
         """
         Processes an image (frame) to detect hands and draw landmarks.
         """
-        # Convert BGR (OpenCV format) to RGB (MediaPipe format)
+        # Convert BGR (OpenCV format) to RGB (MediaPipe format) and make contiguous
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_rgb = np.ascontiguousarray(img_rgb)
         
         # Create a mediapipe Image object
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
