@@ -23,8 +23,8 @@ def main():
         print(f"Error initializing hand tracker: {e}")
         sys.exit(1)
         
-    # Initialize our gesture recognizer
-    recognizer = GestureRecognizer(swipe_threshold=0.15, cooldown_time=1.5)
+    # Initialize our gesture recognizer with temporal confirmation and a short cooldown
+    recognizer = GestureRecognizer(cooldown_time=1.0, stability_frames=5)
     
     # Initialize our presentation controller for Phase 3
     controller = PresentationController()
@@ -57,33 +57,35 @@ def main():
         img, results = tracker.find_hands(img, timestamp_ms, draw=True)
         
         # Gesture Recognition
-        gesture = "None"
+        action_gesture = "None"
         if results and results.hand_landmarks:
-            gesture = recognizer.recognize(results.hand_landmarks)
+            action_gesture = recognizer.recognize(results.hand_landmarks)
             
             # Map gestures to controller actions
-            if gesture == "SWIPE_RIGHT":
+            if action_gesture == "THUMBS_UP":
                 controller.next_slide()
-            elif gesture == "SWIPE_LEFT":
+            elif action_gesture == "THUMBS_DOWN":
                 controller.previous_slide()
-            elif gesture == "INDEX_POINTING":
+            elif action_gesture == "INDEX_POINTING":
                 # Get the index finger tip (landmark ID 8)
                 index_finger_tip = results.hand_landmarks[0][8]
                 # Pass normalized coordinates to the controller
                 controller.move_pointer(index_finger_tip.x, index_finger_tip.y)
         else:
             # Pass None so the recognizer can clear its history if the hand leaves the frame
-            gesture = recognizer.recognize(None)
+            action_gesture = recognizer.recognize(None)
 
         # Draw the detected gesture on the screen (Debug Overlay)
-        cv2.putText(img, f'Gesture: {gesture}', (20, 50), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3, cv2.LINE_AA)
-                    
-        # Draw cooldown status if we recently did a dynamic gesture
-        time_since_gesture = time.time() - recognizer.last_gesture_time
-        if time_since_gesture < recognizer.cooldown_time and gesture in ["SWIPE_LEFT", "SWIPE_RIGHT"]:
-            cv2.putText(img, 'COOLDOWN...', (20, 100), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(img, f'Raw: {recognizer.raw_gesture}', (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(img, f'Confirmed: {recognizer.confirmed_gesture}', (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+        
+        cooldown_color = (0, 0, 255) if recognizer.is_cooldown else (0, 255, 0)
+        cv2.putText(img, f'Cooldown: {recognizer.is_cooldown}', (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, cooldown_color, 2, cv2.LINE_AA)
+        
+        release_color = (0, 165, 255) if recognizer.waiting_for_release else (0, 255, 0)
+        cv2.putText(img, f'Wait Release: {recognizer.waiting_for_release}', (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, release_color, 2, cv2.LINE_AA)
+        
+        cv2.putText(img, f'Action: {action_gesture}', (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 255), 2, cv2.LINE_AA)
 
         # Display the processed image in a window
         cv2.imshow("Gesture Presentation System - Phase 3", img)

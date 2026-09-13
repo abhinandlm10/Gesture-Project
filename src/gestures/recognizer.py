@@ -2,113 +2,124 @@ import time
 from collections import deque
 
 class GestureRecognizer:
-    def __init__(self, swipe_threshold=0.15, cooldown_time=1.5):
+    def __init__(self, cooldown_time=1.5, stability_frames=5):
         """
         Initializes the GestureRecognizer.
         
         Args:
-            swipe_threshold: Minimum horizontal movement (normalized) to register a swipe.
             cooldown_time: Seconds to wait before allowing another dynamic gesture.
+            stability_frames: Number of consecutive frames an identical gesture must be seen to confirm it.
         """
-        self.swipe_threshold = swipe_threshold
         self.cooldown_time = cooldown_time
+        self.stability_frames = stability_frames
         
-        self.last_gesture_time = 0
-        self.current_gesture = "None"
+        self.last_action_time = 0
         
-        # History for dynamic gestures (store X coordinates of wrist)
-        self.wrist_history = deque(maxlen=10)
+        # History for temporal confirmation
+        self.history = deque(maxlen=self.stability_frames)
         
-        # Landmark indices for finger tips and their corresponding lower joints (PIP)
+        # States for external debugging and release mechanic
+        self.raw_gesture = "None"
+        self.confirmed_gesture = "None"
+        self.locked_gesture = "None"
+        self.is_cooldown = False
+        self.waiting_for_release = False
+        
         self.TIP_IDS = [4, 8, 12, 16, 20]
         self.PIP_IDS = [2, 6, 10, 14, 18]
 
     def _get_fingers_up(self, hand_landmarks):
-        """
-        Determines which fingers are raised by comparing tip coordinates to other joints.
-        """
+        """Determines which fingers are raised by comparing distances."""
         fingers = []
+        wrist = hand_landmarks[0]
         
-        # 1. Thumb: Check distance of Thumb TIP (4) to Pinky MCP (17) 
-        # compared to Thumb MCP (2) to Pinky MCP (17). If tip is further away, it's extended.
+        # Thumb: compare tip to wrist vs mcp to wrist
         tip_pinky_dist = ((hand_landmarks[4].x - hand_landmarks[17].x)**2 + (hand_landmarks[4].y - hand_landmarks[17].y)**2)
         mcp_pinky_dist = ((hand_landmarks[2].x - hand_landmarks[17].x)**2 + (hand_landmarks[2].y - hand_landmarks[17].y)**2)
         fingers.append(1 if tip_pinky_dist > mcp_pinky_dist else 0)
 
-        # 2. Four Fingers (Index, Middle, Ring, Pinky)
-        wrist = hand_landmarks[0]
+        # Other fingers
         for id in range(1, 5):
             tip = hand_landmarks[self.TIP_IDS[id]]
             pip = hand_landmarks[self.PIP_IDS[id]]
-            
-            # Use distance from the wrist to determine if a finger is extended (rotation invariant)
             dist_tip_wrist = ((tip.x - wrist.x)**2 + (tip.y - wrist.y)**2)
             dist_pip_wrist = ((pip.x - wrist.x)**2 + (pip.y - wrist.y)**2)
-            
-            if dist_tip_wrist > dist_pip_wrist:
-                fingers.append(1)
-            else:
-                fingers.append(0)
+            fingers.append(1 if dist_tip_wrist > dist_pip_wrist else 0)
                 
         return fingers
 
     def recognize(self, hand_landmarks):
-        """
-        Takes the detected hand landmarks, updates state, and returns the recognized gesture.
-        """
+        """Processes landmarks, applies temporal logic, returns triggered gesture."""
+        action_gesture = "None"
+        
+        # Update cooldown state
+        self.is_cooldown = (time.time() - self.last_action_time) < self.cooldown_time
+
         if not hand_landmarks:
-            self.wrist_history.clear()
-            return self.current_gesture
+            self.history.clear()
+            self.raw_gesture = "None"
+            self.confirmed_gesture = "None"
             
-        # Get the first hand's landmarks
+            # If the hand disappears, we release any locked gestures
+            self.locked_gesture = "None"
+            self.waiting_for_release = False
+            return action_gesture
+            
         landmarks = hand_landmarks[0]
-        
-        # Track wrist X position for swipes
-        wrist_x = landmarks[0].x
-        self.wrist_history.append(wrist_x)
-        
-        # Check cooldown
-        if time.time() - self.last_gesture_time < self.cooldown_time:
-            return self.current_gesture
-            
         fingers = self._get_fingers_up(landmarks)
         total_fingers = sum(fingers)
         
-        # Static Gestures
+        # 1. Determine Raw Gesture
         detected_gesture = "None"
-        
-        if total_fingers <= 1:
-            detected_gesture = "CLOSED_FIST"
+        if total_fingers == 0 or (total_fingers == 1 and fingers[0] == 1):
+            if fingers[0] == 1:
+                # Check orientation based on Y coordinates (smaller Y is higher up)
+                # Compare Thumb Tip (4) to Thumb IP (3)
+                if landmarks[4].y < landmarks[3].y:
+                    detected_gesture = "THUMBS_UP"
+                else:
+                    detected_gesture = "THUMBS_DOWN"
+            else:
+                detected_gesture = "CLOSED_FIST"
         elif total_fingers >= 4:
             detected_gesture = "OPEN_PALM"
-        elif fingers[1] == 1 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] == 0:
-            # Index is up, all other fingers (except maybe thumb) are down
+        elif fingers[1] == 1 and sum(fingers[2:]) == 0:
             detected_gesture = "INDEX_POINTING"
-        elif fingers[1] == 1 and fingers[2] == 1 and fingers[3] == 0 and fingers[4] == 0:
-            # Index and Middle are up
+        elif fingers[1] == 1 and fingers[2] == 1 and sum(fingers[3:]) == 0:
             detected_gesture = "TWO_FINGERS"
             
-        # Dynamic Gestures (Swipes)
-        # Allow swipe if hand is mostly open (e.g. at least 3 fingers up) to be more forgiving
-        if total_fingers >= 3 and len(self.wrist_history) > 3:
-            max_x = max(self.wrist_history)
-            min_x = min(self.wrist_history)
+        self.raw_gesture = detected_gesture
+        self.history.append(self.raw_gesture)
+        
+        # 2. Determine Confirmed Gesture (Temporal Confirmation)
+        if len(self.history) == self.stability_frames and all(g == self.raw_gesture for g in self.history):
+            self.confirmed_gesture = self.raw_gesture
+        else:
+            self.confirmed_gesture = "None"
             
-            # If the total horizontal movement in our recent history exceeds the threshold
-            if (max_x - min_x) > self.swipe_threshold:
-                history_list = list(self.wrist_history)
-                max_idx = history_list.index(max_x)
-                min_idx = history_list.index(min_x)
-                
-                # If the minimum X happened before the maximum X, the hand moved Right
-                if max_idx > min_idx:
-                    detected_gesture = "SWIPE_RIGHT"
-                else:
-                    detected_gesture = "SWIPE_LEFT"
-                    
-                self.last_gesture_time = time.time()
-                self.wrist_history.clear()
+        # 3. Action Triggering and Release Mechanic
+        
+        # Free the lock extremely quickly if the physical thumb is dropped (no longer in history)
+        if self.locked_gesture != "None" and self.locked_gesture not in self.history:
+            self.locked_gesture = "None"
+            self.waiting_for_release = False
+            
+        if self.confirmed_gesture in ["THUMBS_UP", "THUMBS_DOWN"]:
+            # If we see the same gesture that is already locked, wait for release
+            if self.confirmed_gesture == self.locked_gesture:
+                self.waiting_for_release = True
+            else:
+                self.waiting_for_release = False
+                # Trigger action if not in cooldown
+                if not self.is_cooldown:
+                    action_gesture = self.confirmed_gesture
+                    self.last_action_time = time.time()
+                    self.is_cooldown = True
+                    self.locked_gesture = self.confirmed_gesture
+                    self.waiting_for_release = True
+        else:
+            if self.confirmed_gesture != "None":
+                # Continuous gestures like pointing don't lock
+                action_gesture = self.confirmed_gesture
 
-        # Update and return
-        self.current_gesture = detected_gesture
-        return self.current_gesture
+        return action_gesture
