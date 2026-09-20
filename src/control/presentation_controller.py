@@ -55,5 +55,45 @@ class PresentationController:
         self.prev_x = smooth_x
         self.prev_y = smooth_y
         
-        # Move mouse
         pyautogui.moveTo(smooth_x, smooth_y, duration=0)
+
+    def release_pointer(self):
+        """Called when pointing stops to reset smoothing."""
+        self.first_move = True
+
+
+    def take_screenshot(self):
+        """Takes a screenshot and saves it locally, providing audio and visual feedback."""
+        current_time = time.time()
+        if current_time - self.last_action_time > self.action_cooldown:
+            import os
+            from datetime import datetime
+            import winsound
+            from plyer import notification
+            
+            # Create screenshots directory if it doesn't exist
+            screenshots_dir = os.path.join(os.getcwd(), "screenshots")
+            if not os.path.exists(screenshots_dir):
+                os.makedirs(screenshots_dir)
+                
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join(screenshots_dir, f"screenshot_{timestamp}.png")
+            
+            print(f"Action: Screenshot -> Saving to {filename}")
+            pyautogui.screenshot(filename)
+            
+            # Audio Feedback (Standard Windows Asterisk sound)
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+            
+            # Toast Notification
+            try:
+                notification.notify(
+                    title="Screenshot Saved",
+                    message=f"Saved as screenshot_{timestamp}.png",
+                    app_name="Gesture Pointer",
+                    timeout=3  # seconds
+                )
+            except Exception as e:
+                print(f"Notification failed: {e}")
+                
+            self.last_action_time = current_time

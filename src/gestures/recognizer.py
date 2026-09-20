@@ -71,6 +71,7 @@ class GestureRecognizer:
         
         # 1. Determine Raw Gesture
         detected_gesture = "None"
+        
         if total_fingers == 0 or (total_fingers == 1 and fingers[0] == 1):
             if fingers[0] == 1:
                 # Check orientation based on Y coordinates (smaller Y is higher up)
@@ -104,7 +105,8 @@ class GestureRecognizer:
             self.locked_gesture = "None"
             self.waiting_for_release = False
             
-        if self.confirmed_gesture in ["THUMBS_UP", "THUMBS_DOWN"]:
+        trigger_gestures = ["THUMBS_UP", "THUMBS_DOWN", "TWO_FINGERS"]
+        if self.confirmed_gesture in trigger_gestures:
             # If we see the same gesture that is already locked, wait for release
             if self.confirmed_gesture == self.locked_gesture:
                 self.waiting_for_release = True
