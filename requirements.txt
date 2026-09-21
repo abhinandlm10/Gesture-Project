@@ -4,3 +4,5 @@ mediapipe
 pyautogui
 plyer
 PySide6
+SpeechRecognition
+pyaudio

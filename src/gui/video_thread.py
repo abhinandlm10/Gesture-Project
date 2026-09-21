@@ -6,20 +6,22 @@ from PySide6.QtGui import QImage
 from vision.hand_tracker import HandTracker
 from gestures.recognizer import GestureRecognizer
 from control.presentation_controller import PresentationController
+from control.action_manager import ActionManager, PresentationAction
 
 class VideoThread(QThread):
     # Signals to communicate with the GUI
     change_pixmap_signal = Signal(QImage)
     update_gesture_signal = Signal(str, str, bool, bool) # action_gesture, confirmed_gesture, is_cooldown, waiting_for_release
     
-    def __init__(self):
+    def __init__(self, action_manager=None):
         super().__init__()
         self._run_flag = True
         
         # Initialize Core Components
         self.tracker = HandTracker(max_num_hands=1, min_detection_confidence=0.7)
         self.recognizer = GestureRecognizer(cooldown_time=1.0, stability_frames=5)
-        self.controller = PresentationController(smoothing=0.7)
+        self.action_manager = action_manager if action_manager is not None else ActionManager()
+        self.controller = self.action_manager.controller
         self.gestures_active = False
         
         self.gesture_mapping = {
@@ -62,11 +64,11 @@ class VideoThread(QThread):
                 # Only execute actions if gestures are active (Timer is running)
                 if self.gestures_active:
                     if action_gesture == self.gesture_mapping["Next Slide"]:
-                        self.controller.next_slide()
+                        self.action_manager.execute_action(PresentationAction.NEXT_SLIDE, source="Gesture")
                     elif action_gesture == self.gesture_mapping["Previous Slide"]:
-                        self.controller.previous_slide()
+                        self.action_manager.execute_action(PresentationAction.PREVIOUS_SLIDE, source="Gesture")
                     elif action_gesture == self.gesture_mapping["Screenshot"]:
-                        self.controller.take_screenshot()
+                        self.action_manager.execute_action(PresentationAction.SCREENSHOT, source="Gesture")
                         
                     if action_gesture == self.gesture_mapping["Pointer"]:
                         is_pointing = True
