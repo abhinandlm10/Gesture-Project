@@ -51,7 +51,8 @@ class TestVoiceRecognitionAndActions(unittest.TestCase):
     def test_screenshot_variations(self):
         variations = [
             "take screenshot", "take a screenshot", "capture screenshot",
-            "screenshot", "screen capture", "capture screen", "snapshot",
+            "capture the screenshot", "screenshot", "screen capture",
+            "capture screen", "capture the screen", "snapshot",
             "Take screenshot now!", "screen shot", "take screen shot",
             "take a screen shot", "capture screen shot", "print screen",
             "screen grab", "could you take a screenshot"
@@ -61,6 +62,61 @@ class TestVoiceRecognitionAndActions(unittest.TestCase):
                 self.recognizer.parse_command(phrase),
                 PresentationAction.SCREENSHOT,
                 f"Failed matching '{phrase}' to SCREENSHOT"
+            )
+
+    def test_goto_slide_variations(self):
+        cases = [
+            ("go to slide 10", "GOTO_SLIDE:10"),
+            ("got to slide 10", "GOTO_SLIDE:10"),
+            ("goto slide 10", "GOTO_SLIDE:10"),
+            ("slide 10", "GOTO_SLIDE:10"),
+            ("slide ten", "GOTO_SLIDE:10"),
+            ("jump to slide 5", "GOTO_SLIDE:5"),
+            ("go to slide five", "GOTO_SLIDE:5"),
+            ("slide number 42", "GOTO_SLIDE:42"),
+            ("page 3", "GOTO_SLIDE:3"),
+            ("go to page 7", "GOTO_SLIDE:7"),
+            ("10th slide", "GOTO_SLIDE:10"),
+            ("tenth slide", "GOTO_SLIDE:10"),
+            ("go to the tenth slide", "GOTO_SLIDE:10"),
+            ("jump to slide twenty five", "GOTO_SLIDE:25"),
+            ("Please go to slide 10", "GOTO_SLIDE:10"),
+            ("go to slide 10 please", "GOTO_SLIDE:10"),
+            ("move to slide 8", "GOTO_SLIDE:8"),
+            ("switch to slide 12", "GOTO_SLIDE:12"),
+        ]
+        for phrase, expected in cases:
+            self.assertEqual(
+                self.recognizer.parse_command(phrase),
+                expected,
+                f"Failed matching '{phrase}' to {expected}"
+            )
+
+    def test_slideshow_variations(self):
+        start_variations = [
+            "slide show", "slideshow", "start slide show", "start slideshow",
+            "start presentation", "begin slide show", "begin slideshow",
+            "play slide show", "present", "Please start the slide show",
+            "launch presentation", "run slideshow"
+        ]
+        for phrase in start_variations:
+            self.assertEqual(
+                self.recognizer.parse_command(phrase),
+                PresentationAction.START_SLIDESHOW,
+                f"Failed matching '{phrase}' to START_SLIDESHOW"
+            )
+
+        end_variations = [
+            "exit slide show", "exit slideshow", "stop slide show", "stop slideshow",
+            "end slide show", "end slideshow", "close slide show",
+            "exit presentation", "stop presentation", "end presentation",
+            "could you exit slideshow please"
+        ]
+        for phrase in end_variations:
+            self.assertEqual(
+                self.recognizer.parse_command(phrase),
+                PresentationAction.END_SLIDESHOW,
+                f"Failed matching '{phrase}' to END_SLIDESHOW"
             )
 
     # 2. Test Unrecognized Speech and Background Noise
@@ -148,6 +204,31 @@ class TestVoiceRecognitionAndActions(unittest.TestCase):
         self.mock_controller.take_screenshot.assert_called_once()
         self.assertEqual(self.action_manager.last_action, PresentationAction.SCREENSHOT)
         self.assertEqual(self.action_manager.last_action_source, "Voice")
+
+    def test_action_manager_goto_slide(self):
+        # Colon-delimited slide jump (emitted by voice recognizer)
+        result = self.action_manager.execute_action("GOTO_SLIDE:10", source="Voice")
+        self.assertTrue(result)
+        self.mock_controller.goto_slide.assert_called_with(10)
+        self.assertEqual(self.action_manager.last_action, "GOTO_SLIDE:10")
+
+        # Explicit parameter call
+        result2 = self.action_manager.execute_action(PresentationAction.GOTO_SLIDE, source="Voice", slide_number=5)
+        self.assertTrue(result2)
+        self.mock_controller.goto_slide.assert_called_with(5)
+
+    def test_action_manager_slideshow(self):
+        # Start slideshow
+        result_start = self.action_manager.execute_action(PresentationAction.START_SLIDESHOW, source="Voice")
+        self.assertTrue(result_start)
+        self.mock_controller.start_slideshow.assert_called_once()
+        self.assertEqual(self.action_manager.last_action, PresentationAction.START_SLIDESHOW)
+
+        # End slideshow
+        result_end = self.action_manager.execute_action(PresentationAction.END_SLIDESHOW, source="Voice")
+        self.assertTrue(result_end)
+        self.mock_controller.end_slideshow.assert_called_once()
+        self.assertEqual(self.action_manager.last_action, PresentationAction.END_SLIDESHOW)
 
     # 5. Coexistence: Gesture + Voice through ActionManager
     def test_gesture_and_voice_coexistence(self):

@@ -319,12 +319,18 @@ class MainWindow(QMainWindow):
         hint1.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
         hint2 = QLabel("• <b>Previous Slide</b>: <i>'previous', 'go back', 'prior', 'prev'</i>")
         hint2.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
-        hint3 = QLabel("• <b>Screenshot</b>: <i>'take screenshot', 'capture screen', 'snapshot'</i>")
+        hint3 = QLabel("• <b>Go to Slide</b>: <i>'go to slide 10', 'slide 5', 'page 12'</i>")
         hint3.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
+        hint4 = QLabel("• <b>Slide Show</b>: <i>'slide show', 'start presentation', 'exit slideshow'</i>")
+        hint4.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
+        hint5 = QLabel("• <b>Screenshot</b>: <i>'take screenshot', 'capture screen', 'snapshot'</i>")
+        hint5.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
 
         cmd_layout.addWidget(hint1)
         cmd_layout.addWidget(hint2)
         cmd_layout.addWidget(hint3)
+        cmd_layout.addWidget(hint4)
+        cmd_layout.addWidget(hint5)
         voice_tab_layout.addWidget(cmd_card)
         voice_tab_layout.addStretch(1)
 
@@ -610,8 +616,17 @@ class MainWindow(QMainWindow):
 
         executed = self.action_manager.execute_action(action_name, source="Voice")
         if executed:
-            self.lbl_voice_command.setText(f"Command: <span style='color:#38BDF8; font-weight:bold;'>{action_name}</span> (\"{spoken_text}\")")
-            self.last_voice_action_text = f"Voice Action: {action_name} (\"{spoken_text}\")"
+            display_action = action_name
+            if action_name.startswith("GOTO_SLIDE:"):
+                slide_num = action_name.split(":")[1]
+                display_action = f"Go To Slide {slide_num}"
+            elif action_name == "START_SLIDESHOW":
+                display_action = "Start Slideshow (F5)"
+            elif action_name == "END_SLIDESHOW":
+                display_action = "Exit Slideshow (Esc)"
+
+            self.lbl_voice_command.setText(f"Command: <span style='color:#38BDF8; font-weight:bold;'>{display_action}</span> (\"{spoken_text}\")")
+            self.last_voice_action_text = f"Voice Action: {display_action} (\"{spoken_text}\")"
             self.last_voice_action_display_time = time.time()
             self.status_label.setText(self.last_voice_action_text)
             self.status_label.setStyleSheet("color: #38BDF8;")

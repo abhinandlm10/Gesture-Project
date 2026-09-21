@@ -34,6 +34,76 @@ class VoiceCommandRecognizer:
             "snap screen", "print screen", "save screen", "screen grab", "grab screen",
             "take screen shot", "capture screen shot"
         }
+        self._slideshow_start_phrases = {
+            "slide show", "slideshow", "start slide show", "start slideshow",
+            "start presentation", "begin slide show", "begin slideshow",
+            "begin presentation", "play slide show", "play slideshow",
+            "launch slideshow", "launch slide show", "launch presentation",
+            "open slideshow", "open slide show", "run slideshow", "run slide show",
+            "present", "start presenting", "view slideshow", "view slide show"
+        }
+        self._slideshow_end_phrases = {
+            "exit slide show", "exit slideshow", "stop slide show", "stop slideshow",
+            "end slide show", "end slideshow", "close slide show", "close slideshow",
+            "exit presentation", "stop presentation", "end presentation",
+            "close presentation", "quit slide show", "quit slideshow",
+            "stop presenting"
+        }
+
+    WORD_TO_DIGIT = {
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
+        "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+        "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+        "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+        "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+        "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+        "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+        "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+        "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18,
+        "nineteenth": 19, "twentieth": 20, "thirtieth": 30, "fortieth": 40,
+        "fiftieth": 50, "sixtieth": 60, "seventieth": 70, "eightieth": 80, "ninetieth": 90,
+    }
+
+    @classmethod
+    def parse_number(cls, text: str) -> Optional[int]:
+        """
+        Parses a string representing a number (digits or English words up to 999) into an integer.
+        Returns None if not a valid number.
+        """
+        text = text.strip().lower()
+        # Direct integer check
+        if text.isdigit():
+            val = int(text)
+            return val if val > 0 else None
+
+        # Check for ordinal digits like '10th', '1st', '2nd', '3rd'
+        m = re.match(r"^(\d+)(st|nd|rd|th)$", text)
+        if m:
+            val = int(m.group(1))
+            return val if val > 0 else None
+
+        # Word-based numbers
+        words = text.replace("-", " ").split()
+        words = [w for w in words if w != "and"]
+        if not words:
+            return None
+
+        total = 0
+        current = 0
+        for w in words:
+            if w in cls.WORD_TO_DIGIT:
+                current += cls.WORD_TO_DIGIT[w]
+            elif w in ("hundred", "hundredth"):
+                current = max(1, current) * 100
+                total += current
+                current = 0
+            elif w.isdigit():
+                current += int(w)
+            else:
+                return None
+        total += current
+        return total if total > 0 else None
 
     def set_cooldown(self, seconds: float):
         """Dynamically updates the debouncing cooldown duration."""
@@ -52,6 +122,8 @@ class VoiceCommandRecognizer:
         cleaned = re.sub(r"\bscreen\s+shot\b", "screenshot", cleaned)
         cleaned = re.sub(r"\bscreenshoot\b", "screenshot", cleaned)
         cleaned = re.sub(r"\b(necks|nest)\s+slide\b", "next slide", cleaned)
+        cleaned = re.sub(r"\bgot\s+to\b", "go to", cleaned)
+        cleaned = re.sub(r"\bgoto\b", "go to", cleaned)
         return cleaned
 
     @staticmethod
@@ -72,7 +144,8 @@ class VoiceCommandRecognizer:
         against false-triggering on natural presentation speech.
         
         Returns:
-            str: 'NEXT_SLIDE', 'PREVIOUS_SLIDE', 'SCREENSHOT', or None if no match.
+            str: 'NEXT_SLIDE', 'PREVIOUS_SLIDE', 'SCREENSHOT', 'START_SLIDESHOW',
+                 'END_SLIDESHOW', 'GOTO_SLIDE:<N>', or None if no match.
         """
         normalized = self.normalize_text(raw_text)
         if not normalized:
@@ -85,6 +158,10 @@ class VoiceCommandRecognizer:
             return "PREVIOUS_SLIDE"
         if normalized in self._screenshot_phrases:
             return "SCREENSHOT"
+        if normalized in self._slideshow_start_phrases:
+            return "START_SLIDESHOW"
+        if normalized in self._slideshow_end_phrases:
+            return "END_SLIDESHOW"
 
         # 2. Check after conversational padding removal (e.g. "please go to next slide")
         unpadded = self.strip_conversational_padding(normalized)
@@ -94,6 +171,42 @@ class VoiceCommandRecognizer:
             return "PREVIOUS_SLIDE"
         if unpadded in self._screenshot_phrases:
             return "SCREENSHOT"
+        if unpadded in self._slideshow_start_phrases:
+            return "START_SLIDESHOW"
+        if unpadded in self._slideshow_end_phrases:
+            return "END_SLIDESHOW"
+
+        # 3. Direct Slide Navigation Rules ("go to slide 10", "slide 5", "page 3", "slide number 10", etc.)
+        slide_match = re.match(
+            r"^(?:(?:go\s+to|goto|jump\s+to|move\s+to|switch\s+to|show|open)\s+)?(?:the\s+)?(?:slide|page)(?:\s+number)?\s+(.+)$",
+            unpadded
+        )
+        if slide_match:
+            target = slide_match.group(1).strip()
+            num = self.parse_number(target)
+            if num is not None:
+                return f"GOTO_SLIDE:{num}"
+
+        # Ordinal before slide: "10th slide", "tenth slide", "go to the 10th slide"
+        ordinal_match = re.match(
+            r"^(?:(?:go\s+to|goto|jump\s+to|move\s+to|switch\s+to|show|open)\s+)?(?:the\s+)?(.+?)\s+(?:slide|page)$",
+            unpadded
+        )
+        if ordinal_match:
+            target = ordinal_match.group(1).strip()
+            if target not in {"next", "previous", "prev", "last", "prior", "another"}:
+                num = self.parse_number(target)
+                if num is not None:
+                    return f"GOTO_SLIDE:{num}"
+
+        # Direct "go to 10" / "goto 10" / "jump to 10"
+        goto_match = re.match(r"^(?:go\s+to|goto|jump\s+to|move\s+to)\s+(.+)$", unpadded)
+        if goto_match:
+            target = goto_match.group(1).strip()
+            if target not in {"next", "previous", "prev", "last", "prior"}:
+                num = self.parse_number(target)
+                if num is not None:
+                    return f"GOTO_SLIDE:{num}"
 
         tokens = unpadded.split()
 
@@ -102,10 +215,20 @@ class VoiceCommandRecognizer:
         if len(tokens) > 6:
             return None
 
-        # 3. Flexible Keyword & Pattern Rules (Filtered tokens)
-        # Filter out purely syntactic filler articles and prepositions
+        # 4. Flexible Keyword & Pattern Rules (Filtered tokens)
         filtered_tokens = [w for w in tokens if w not in {"the", "a", "an", "to", "for"}]
         filtered_set = set(filtered_tokens)
+
+        # Slideshow checks
+        if "slideshow" in filtered_set or ("slide" in filtered_set and "show" in filtered_set):
+            if any(w in filtered_set for w in ("exit", "stop", "end", "close", "quit", "leave")):
+                return "END_SLIDESHOW"
+            return "START_SLIDESHOW"
+        if "presentation" in filtered_set:
+            if any(w in filtered_set for w in ("exit", "stop", "end", "close", "quit")):
+                return "END_SLIDESHOW"
+            if any(w in filtered_set for w in ("start", "begin", "launch", "play", "run", "open", "present")):
+                return "START_SLIDESHOW"
 
         # Screenshot checks
         if "screenshot" in filtered_set or "snapshot" in filtered_set:

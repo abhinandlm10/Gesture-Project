@@ -20,8 +20,11 @@ Control slides using natural spoken commands through your computer microphone. I
 
 | Spoken Voice Command | Variations Allowed | Presentation Action | PowerPoint Effect |
 |----------------------|-------------------|---------------------|-------------------|
-| **"Next slide"** | "next", "go to next slide", "go next", "next page", "forward" | `NEXT_SLIDE` | Advances to the next slide |
-| **"Previous slide"** | "previous", "go to previous slide", "go previous", "prev", "back", "go back" | `PREVIOUS_SLIDE` | Returns to previous slide |
+| **"Next slide"** | "next", "go to next slide", "go next", "next page", "forward", "advance" | `NEXT_SLIDE` | Advances to the next slide (`Right Arrow`) |
+| **"Previous slide"** | "previous", "go to previous slide", "go previous", "prev", "back", "go back" | `PREVIOUS_SLIDE` | Returns to previous slide (`Left Arrow`) |
+| **"Go to slide [N]"** | "goto slide 10", "slide 5", "page 12", "jump to slide 42", "go to slide ten" | `GOTO_SLIDE` | Jumps directly to slide N (`[N] + Enter`) |
+| **"Slide show"** | "slideshow", "start slide show", "start presentation", "begin presentation" | `START_SLIDESHOW` | Starts slideshow from beginning (`F5`) |
+| **"Exit slideshow"** | "stop slide show", "end slideshow", "close presentation", "stop presentation" | `END_SLIDESHOW` | Exits slideshow mode (`Esc`) |
 | **"Take screenshot"** | "screenshot", "capture screenshot", "capture screen", "snapshot" | `SCREENSHOT` | Saves screenshot with notification |
 
 ---

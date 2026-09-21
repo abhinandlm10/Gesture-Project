@@ -34,6 +34,53 @@ class PresentationController:
             print("Action: Previous Slide -> Pressing Left Arrow")
             pyautogui.press('left')
             self.last_action_time = current_time
+
+    def goto_slide(self, slide_number: int):
+        """
+        Simulates typing the slide number and pressing Enter to jump directly to that slide.
+        Standard behavior in PowerPoint, Keynote, LibreOffice Impress, and full-screen PDF presentations.
+        """
+        current_time = time.time()
+        if current_time - self.last_action_time > self.action_cooldown:
+            if slide_number <= 0:
+                print(f"[PresentationController] Invalid slide number: {slide_number}")
+                return
+            print(f"Action: Go To Slide -> Jumping to slide {slide_number}")
+            for digit in str(slide_number):
+                pyautogui.press(digit)
+            pyautogui.press('enter')
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_OK)
+            except Exception:
+                pass
+            self.last_action_time = current_time
+
+    def start_slideshow(self):
+        """Simulates pressing F5 to start slideshow from beginning."""
+        current_time = time.time()
+        if current_time - self.last_action_time > self.action_cooldown:
+            print("Action: Start Slideshow -> Pressing F5")
+            pyautogui.press('f5')
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_OK)
+            except Exception:
+                pass
+            self.last_action_time = current_time
+
+    def end_slideshow(self):
+        """Simulates pressing Esc to exit slideshow mode."""
+        current_time = time.time()
+        if current_time - self.last_action_time > self.action_cooldown:
+            print("Action: End Slideshow -> Pressing Esc")
+            pyautogui.press('esc')
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_OK)
+            except Exception:
+                pass
+            self.last_action_time = current_time
             
     def move_pointer(self, x_norm, y_norm):
         """
